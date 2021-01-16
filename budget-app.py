@@ -1,10 +1,8 @@
 from flask import Flask # include the flask library 
 from flask import request
 from flask import json
-from flask_cors import CORS
 
 app = Flask(__name__) 
-CORS(app)
 
 import pyodbc 
 conn = pyodbc.connect('Driver={ODBC Driver 17 for SQL Server};Server=tcp:budgetapp.database.windows.net,1433;Database=budgetDB;Uid=jegordon42;Pwd={Never4get42};Encrypt=yes;TrustServerCertificate=no;Connection Timeout=30;')
