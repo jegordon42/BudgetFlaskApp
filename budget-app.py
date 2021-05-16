@@ -20,6 +20,16 @@ def SignUp():
     email = request.args.get('email')
     password = request.args.get('password')
 
+    getUserSQL = "SELECT UserId FROM BudgetDB.dbo.Users Where Email = '" + email + "'"
+    cursor.execute(getUserSQL)
+    row=cursor.fetchone()
+    if (row is not None):
+        response = app.response_class(
+            response=json.dumps({'message' : 'User already exists!'}),
+            mimetype='application/json'
+        )
+        return response
+
     addUserSQL =  "INSERT INTO BudgetDB.dbo.Users (Username, FirstName, LastName, Email, Password) VALUES " 
     addUserSQL += "(' " + username + "', '" + firstName + "', '" + lastName + "', '" + email + "', '" + password + "')"         
     cursor.execute(addUserSQL)
@@ -177,62 +187,69 @@ def UpdateCategories():
     )
     return response
 
-@app.route("/UpdateTransactions", methods=['GET', 'POST']) 
-def UpdateTransactions(): 
+@app.route("/UpdateTransaction", methods=['GET', 'POST']) 
+def UpdateTransaction():
+    transaction = request.json['transaction']
+
+    updateTransactionSQL = "UPDATE BudgetDB.dbo.Transactions SET "
+    updateTransactionSQL += "UserCategoryId = " + str(transaction['CategoryId']) + ", "
+    updateTransactionSQL += "Description = '" + transaction['Description'] + "', "
+    updateTransactionSQL += "Amount = " + str(transaction['Amount']) + ", "
+    updateTransactionSQL += "TransactionDate = '" + transaction['Date'] + "' "
+    updateTransactionSQL += "WHERE TransactionId = " + str(transaction['TransactionId'])
+
+    cursor.execute(updateTransactionSQL)
+    conn.commit()
+
+    response = app.response_class(
+        response=json.dumps({'message' : 'Success'}),
+        mimetype='application/json'
+    )
+    return response
+
+@app.route("/AddTransactions", methods=['GET', 'POST']) 
+def AddTransactions():
     userId = request.json['userId']
+    transactionsToAdd = request.json['transactionsToAdd']
     transactionType = request.json['transactionType']
-    transactions = request.json['transactions']
 
-    if(len(transactions) == 0):
-        deleteTransactionssSQL =  "DELETE FROM BudgetDB.dbo.Transactions WHERE UserId = " + str(userId) + " AND TransactionType = '" + transactionType + "'"
-        cursor.execute(deleteTransactionssSQL)
-        conn.commit()
-    else:
-        inList = "("
-        newTransactions = []
-        updateTransactions = []
-        for transaction in transactions:
-            inList += str(transaction['TransactionId']) + ','
-            if(transaction['TransactionId'] == 0):
-                newTransactions.append(transaction)
-            else:
-                updateTransactions.append(transaction)
-        inList = inList[:-1]
-        inList += ")"
+    addTransactionsSql = "INSERT INTO BudgetDB.dbo.Transactions (UserId, UserCategoryId, TransactionType, Description, Amount, TransactionDate) VALUES "
+    for transaction in transactionsToAdd:
+        addTransactionsSql += "( " + str(userId) + ", " + str(transaction['CategoryId']) + ", '" + transactionType + "', '" + transaction['Description'].replace("'", "''") + "', " + str(transaction['Amount']) + ", '" + transaction['Date'] + "'),"
+    addTransactionsSql = addTransactionsSql[:-1]
+    
+    cursor.execute(addTransactionsSql)
+    conn.commit()
 
-        deleteTransactionssSQL =  "DELETE FROM BudgetDB.dbo.Transactions WHERE UserId = " + str(userId) + " AND TransactionId NOT IN " +  inList + " AND TransactionType = '" + transactionType + "'"
-        cursor.execute(deleteTransactionssSQL)
-        conn.commit()
-        
-        if(len(newTransactions) > 0):
-            addTransactionsSql = "INSERT INTO BudgetDB.dbo.Transactions (UserId, UserCategoryId, TransactionType, Description, Amount, TransactionDate) VALUES "
-            for transaction in newTransactions:
-                addTransactionsSql += "( " + str(userId) + ", " + str(transaction['CategoryId']) + ", '" + transactionType + "', '" + transaction['Description'] + "', " + str(transaction['Amount']) + ", '" + transaction['Date'] + "'),"
-            addTransactionsSql = addTransactionsSql[:-1]
-            
-            cursor.execute(addTransactionsSql)
-            conn.commit()
-        
-        for transaction in updateTransactions:
-            updateTransactionSQL = "UPDATE BudgetDB.dbo.Transactions SET "
-            updateTransactionSQL += "UserCategoryId = " + str(transaction['CategoryId']) + ", "
-            updateTransactionSQL += "Description = '" + transaction['Description'] + "', "
-            updateTransactionSQL += "Amount = " + str(transaction['Amount']) + ", "
-            updateTransactionSQL += "TransactionDate = '" + transaction['Date'] + "' "
-            updateTransactionSQL += "WHERE TransactionId = " + str(transaction['TransactionId'])
-            cursor.execute(updateTransactionSQL)
-            conn.commit()
-
-        getTransactionsSQL = "SELECT T.TransactionId, T.UserCategoryId, T.Description, T.Amount, T.TransactionDate, T.TransactionType, T.UserId FROM dbo.Transactions T  Where T.UserId=" + str(userId) + " ORDER BY T.TransactionDate DESC, T.TransactionId DESC"
-        cursor.execute(getTransactionsSQL)
-        transactionsResult = cursor.fetchall()
-        transactions = []
-        if(transactionsResult is not None):
-            for transaction in list(filter(lambda transaction: transaction[5] == transactionType, transactionsResult)):
-                transactions.append({'TransactionId' : transaction[0], 'CategoryId' : transaction[1], 'Description' : transaction[2], 'Amount' : float(transaction[3]), 'Date' : transaction[4]})
+    getTransactionsSQL = "SELECT T.TransactionId, T.UserCategoryId, T.Description, T.Amount, T.TransactionDate, T.TransactionType, T.UserId FROM dbo.Transactions T  Where T.UserId=" + str(userId) + " ORDER BY T.TransactionDate DESC, T.TransactionId DESC"
+    cursor.execute(getTransactionsSQL)
+    transactionsResult = cursor.fetchall()
+    transactions = []
+    for transaction in list(filter(lambda transaction: transaction[5] == transactionType, transactionsResult)):
+        transactions.append({'TransactionId' : transaction[0], 'CategoryId' : transaction[1], 'Description' : transaction[2], 'Amount' : float(transaction[3]), 'Date' : transaction[4]})
 
     response = app.response_class(
         response=json.dumps({'message' : 'Success', 'transactions' : transactions}),
+        mimetype='application/json'
+    )
+    return response
+
+@app.route("/DeleteTransactions", methods=['GET', 'POST']) 
+def DeleteTransactions():
+    transactionIdsToDelete = request.json['transactionIdsToDelete']
+
+    inList = "("
+    for transactionId in transactionIdsToDelete:
+        inList += str(transactionId) + ','
+    inList = inList[:-1]
+    inList += ")"
+
+    deleteTransactionssSQL =  "DELETE FROM BudgetDB.dbo.Transactions WHERE TransactionId IN " +  inList
+    cursor.execute(deleteTransactionssSQL)
+    conn.commit()
+
+    response = app.response_class(
+        response=json.dumps({'message' : 'Success'}),
         mimetype='application/json'
     )
     return response
