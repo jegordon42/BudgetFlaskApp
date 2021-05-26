@@ -129,60 +129,68 @@ def GetUserObj(userId):
         'incomeTransactions' : incomeTransactions
     }
 
-@app.route("/UpdateCategories", methods=['GET', 'POST']) 
-def UpdateCategories(): 
+@app.route("/AddCategories", methods=['GET', 'POST']) 
+def AddCategories():
     userId = request.json['userId']
-    categories = request.json['categories']
+    categoriesToAdd = request.json['categoriesToAdd']
     categoryType = request.json['categoryType']
 
-    if(len(categories) == 0):
-        deleteCategoriesSQL =  "DELETE FROM BudgetDB.dbo.UserCategories WHERE UserId = " + str(userId) + " AND CategoryType = '" + categoryType + "'"
-        cursor.execute(deleteCategoriesSQL)
-        conn.commit()
-    else:
-        inList = "("
-        newCategories = []
-        updateCategories = []
-        for category in categories:
-            inList += str(category['CategoryId']) + ','
-            if(category['CategoryId'] == 0):
-                newCategories.append(category)
-            else:
-                updateCategories.append(category)
-        inList = inList[:-1]
-        inList += ")"
+    addCategoriesSql = "INSERT INTO BudgetDB.dbo.UserCategories (UserId, CategoryName, CategoryType, PlannedSpending) VALUES "
+    for category in categoriesToAdd:
+        addCategoriesSql += "( " + str(userId) + ", '" + str(category['CategoryName']) + "', '" + categoryType + "', " + str(category['PlannedSpending']) + "),"
+    addCategoriesSql = addCategoriesSql[:-1]
+    
+    cursor.execute(addCategoriesSql)
+    conn.commit()
 
-        deleteCategoriesSQL =  "DELETE FROM BudgetDB.dbo.UserCategories WHERE UserId = " + str(userId) + " AND UserCategoryId NOT IN " +  inList + " AND CategoryType = '" + categoryType + "'"
-        cursor.execute(deleteCategoriesSQL)
-        conn.commit()
-        
-        if(len(newCategories) > 0):
-            addCategoriesSql = "INSERT INTO BudgetDB.dbo.UserCategories (UserId, CategoryName, CategoryType, PlannedSpending) VALUES "
-            for category in newCategories:
-                addCategoriesSql += "( " + str(userId) + ", '" + str(category['CategoryName']) + "', '" + categoryType + "', " + str(category['Planned']) + "),"
-            addCategoriesSql = addCategoriesSql[:-1]
-            
-            cursor.execute(addCategoriesSql)
-            conn.commit()
-        
-        for category in updateCategories:
-            updateCategorySQL = "UPDATE BudgetDB.dbo.UserCategories SET "
-            updateCategorySQL += "CategoryName = '" + category['CategoryName'] + "', "
-            updateCategorySQL += "PlannedSpending = " + str(category['Planned']) + " "
-            updateCategorySQL += "WHERE UserCategoryId = " + str(category['CategoryId'])
-            cursor.execute(updateCategorySQL)
-            conn.commit()
-
-        getCategoriesSQL =  "SELECT * FROM BudgetDB.dbo.UserCategories Where UserId="  + str(userId)
-        cursor.execute(getCategoriesSQL)
-        categoryResult = cursor.fetchall()
-        categories = []
-        if(categoryResult is not None):
-            for category in list(filter(lambda category: category[3] == categoryType, categoryResult)):
-                 categories.append({'CategoryId' : category[0], 'CategoryName' : category[2], 'Planned' : float(category[4])})
+    getCategoriesSQL =  "SELECT * FROM BudgetDB.dbo.UserCategories Where UserId="  + str(userId) + " and CategoryType='" + categoryType + "'" 
+    cursor.execute(getCategoriesSQL)
+    categoryResult = cursor.fetchall()
+    categories = []
+    for category in categoryResult:
+        categories.append({'CategoryId' : category[0], 'UserId' : category[1], 'CategoryName' : category[2], 'Planned' : float(category[4])})
 
     response = app.response_class(
         response=json.dumps({'message' : 'Success', 'categories' : categories}),
+        mimetype='application/json'
+    )
+    return response
+
+@app.route("/DeleteCategories", methods=['GET', 'POST']) 
+def DeleteCategories():
+    categoryIdsToDelete = request.json['categoryIdsToDelete']
+
+    inList = "("
+    for categoryId in categoryIdsToDelete:
+        inList += str(categoryId) + ','
+    inList = inList[:-1]
+    inList += ")"
+
+    deleteCategoriesSQL =  "DELETE FROM BudgetDB.dbo.UserCategories WHERE UserCategoryId IN " +  inList
+    cursor.execute(deleteCategoriesSQL)
+    conn.commit()
+
+    response = app.response_class(
+        response=json.dumps({'message' : 'Success'}),
+        mimetype='application/json'
+    )
+    return response
+
+
+@app.route("/UpdateCategory", methods=['GET', 'POST']) 
+def UpdateCategory():
+    category = request.json['category']
+
+    updateCategorySQL = "UPDATE BudgetDB.dbo.UserCategories SET "
+    updateCategorySQL += "CategoryName = '" + category['CategoryName'] + "', "
+    updateCategorySQL += "PlannedSpending = " + str(category['Planned']) + " "
+    updateCategorySQL += "WHERE UserCategoryId = " + str(category['CategoryId'])
+
+    cursor.execute(updateCategorySQL)
+    conn.commit()
+
+    response = app.response_class(
+        response=json.dumps({'message' : 'Success'}),
         mimetype='application/json'
     )
     return response
